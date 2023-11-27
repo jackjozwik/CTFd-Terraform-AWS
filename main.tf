@@ -17,7 +17,7 @@ provider "aws" {
 
 locals {
   env_variables = {
-    "DATABASE_URL" = "mysql+pymysql://${aws_ssm_parameter.db_username.value}:${aws_ssm_parameter.db_password.value}@${aws_db_instance.mysql_instance.endpoint}/ctfd"
+    "DATABASE_URL" = "mysql+pymysql://${aws_ssm_parameter.db_username.value}:${data.aws_ssm_parameter.db_password.value}@${aws_db_instance.mysql_instance.endpoint}/ctfd"
     # "REDIS_URL"             = "redis://${aws_elasticache_cluster.redis_cache.cache_nodes[0].address}:6379"
     "UPLOAD_PROVIDER"       = "s3"
     "AWS_ACCESS_KEY_ID"     = var.access_key
@@ -44,10 +44,16 @@ resource "aws_ssm_parameter" "db_username" {
   value = "admin"
 }
 
-resource "aws_ssm_parameter" "db_password" {
-  name  = "/ctfd/database/password"
-  type  = "SecureString"
-  value = random_password.password.result
+# Used to generate a random password for the database
+# resource "aws_ssm_parameter" "db_password" {
+#   name  = "/ctfd/database/password"
+#   type  = "SecureString"
+#   value = random_password.password.result
+# }
+
+# Data source for existing database password
+data "aws_ssm_parameter" "db_password" {
+  name = "/ctfd/database/password"
 }
 
 
@@ -375,7 +381,7 @@ resource "aws_db_instance" "mysql_instance" {
   allocated_storage = 20
 
   username = aws_ssm_parameter.db_username.value
-  password = aws_ssm_parameter.db_password.value
+  password = data.aws_ssm_parameter.db_password.value
 
   # CONFIGURE SECURITY GROUPS AND "PUBLICLY ACCESSIBLE" (for testing purposes only)
   skip_final_snapshot    = true
@@ -525,8 +531,8 @@ resource "aws_ecs_task_definition" "ecs_task" {
   family                   = "ctfd-ecs-task"
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  cpu                      = "2048"                                                # 1 vCPU
-  memory                   = "4096"                                                # 2GB RAM
+  cpu                      = "1024"                                                # 1 vCPU = 1024 CPU units
+  memory                   = "4096"                                                # 2GB RAM = 2048 MiB
   execution_role_arn       = "arn:aws:iam::837592798451:role/ecsTaskExecutionRole" #default
 
   container_definitions = jsonencode([{
@@ -561,12 +567,33 @@ resource "aws_ecs_task_definition" "ecs_task" {
       },
       {
         name  = "DATABASE_URL",
-        value = "mysql+pymysql://${aws_ssm_parameter.db_username.value}:${aws_ssm_parameter.db_password.value}@${aws_db_instance.mysql_instance.endpoint}/ctfd"
+        value = "mysql+pymysql://${aws_ssm_parameter.db_username.value}:${data.aws_ssm_parameter.db_password.value}@${aws_db_instance.mysql_instance.endpoint}/ctfd"
       },
       {
         name  = "REDIS_URL",
         value = "redis://${aws_elasticache_replication_group.redis_cache_group.primary_endpoint_address}:6379"
-      }
+      },
+      {
+        name  = "AWS_S3_BUCKET",
+        value = "${aws_s3_bucket.s3_bucket_ctfd_uploads.id}"
+      },
+      {
+        name  = "AWS_S3_ENDPOINT_URL",
+        value = "https://${aws_s3_bucket.s3_bucket_ctfd_uploads.bucket_regional_domain_name}"
+      },
+      {
+        name  = "AWS_ACCESS_KEY_ID",
+        value = "${var.access_key}"
+      },
+      { 
+        name = "AWS_SECRET_ACCESS_KEY",
+        value = "${var.secret_key}"
+      },
+      {
+        name  = "UPLOAD_PROVIDER",
+        value = "s3"
+      },
+
     ]
 
 
@@ -579,7 +606,7 @@ resource "aws_ecs_service" "ecs_service" {
   cluster         = aws_ecs_cluster.ecs_cluster.id
   task_definition = aws_ecs_task_definition.ecs_task.arn
   launch_type     = "FARGATE"
-  desired_count   = 3 #UPDATE TO SCALE - can also select auto-scale 
+  desired_count   = 1 #UPDATE TO SCALE
 
   network_configuration {
     subnets         = [aws_subnet.private_subnet_a.id, aws_subnet.private_subnet_b.id]
@@ -590,5 +617,29 @@ resource "aws_ecs_service" "ecs_service" {
     target_group_arn = aws_lb_target_group.target_group.arn
     container_name   = "ctfd"
     container_port   = 8000
+  }
+}
+
+# Application Auto Scaling
+resource "aws_appautoscaling_target" "ecs_target" {
+  min_capacity       = 1
+  max_capacity       = 10
+  resource_id        = "service/${aws_ecs_cluster.ecs_cluster.name}/${aws_ecs_service.ecs_service.name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+}
+
+resource "aws_appautoscaling_policy" "ecs_policy" {
+  name               = "ctfd-auto-scaling"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.ecs_target.resource_id
+  scalable_dimension = aws_appautoscaling_target.ecs_target.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.ecs_target.service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ECSServiceAverageCPUUtilization"
+    }
+    target_value = 70.0 # Target CPU Utilization Percent
   }
 }
