@@ -274,6 +274,7 @@ resource "aws_security_group" "ToApplicationLoadBalancerFromAnywhere" {
   description = "Allow inbound traffic on port 80"
   vpc_id      = aws_vpc.private_network.id
 
+ # Allow HTTP traffic - to be removed later for testing purposes
   ingress {
     from_port   = 80
     to_port     = 80
@@ -284,6 +285,21 @@ resource "aws_security_group" "ToApplicationLoadBalancerFromAnywhere" {
   ingress {
     from_port        = 80
     to_port          = 80
+    protocol         = "tcp"
+    ipv6_cidr_blocks = ["::/0"]
+  }
+
+  # Allow HTTPS traffic
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port        = 443
+    to_port          = 443
     protocol         = "tcp"
     ipv6_cidr_blocks = ["::/0"]
   }
@@ -454,6 +470,21 @@ resource "aws_s3_bucket_acl" "bucket_acl" {
 }
 
 
+# ACM Certificate
+resource "aws_acm_certificate" "cert" {
+  domain_name               = "ctf.issessions.ca"
+  subject_alternative_names = ["*.ctf.issessions.ca"]  # Covers all subdomains like web1.ctf.issessions.ca
+  validation_method         = "DNS"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name = "ctf_issessions_ca_certificate"
+  }
+}
+
 
 #ELB
 resource "aws_lb" "alb" {
@@ -470,11 +501,13 @@ resource "aws_lb" "alb" {
   }
 }
 
-# ALB Listener
-resource "aws_lb_listener" "alb_listener" {
+# ALB HTTPS Listener
+resource "aws_lb_listener" "https_listener" {
   load_balancer_arn = aws_lb.alb.arn
-  port              = "80"
-  protocol          = "HTTP"
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-2016-08"
+  certificate_arn   = aws_acm_certificate.cert.arn # Reference ACM certificate
 
   default_action {
     type             = "forward"
@@ -482,11 +515,23 @@ resource "aws_lb_listener" "alb_listener" {
   }
 }
 
-# Target Group
-resource "aws_lb_target_group" "target_group" {
-  name        = "ctfd-target-group"
-  port        = 80
-  protocol    = "HTTP"
+# ALB HTTP Listener - can use for testing purposes prior to domain setup
+# resource "aws_lb_listener" "alb_listener" {
+#   load_balancer_arn = aws_lb.alb.arn
+#   port              = "80"
+#   protocol          = "HTTP"
+
+#   default_action {
+#     type             = "forward"
+#     target_group_arn = aws_lb_target_group.target_group.arn
+#   }
+# }
+
+# Target Group for HTTPS
+resource "aws_lb_target_group" "https_target_group" {
+  name        = "ctfd-target-group-https"
+  port        = 443 # Ensure your service is listening on HTTPS port
+  protocol    = "HTTPS"
   target_type = "ip"
   vpc_id      = aws_vpc.private_network.id
 
@@ -495,9 +540,25 @@ resource "aws_lb_target_group" "target_group" {
     unhealthy_threshold = 5
     matcher             = "200,302,304"
     timeout             = 15
+    protocol            = "HTTPS" # Update to HTTPS
   }
 }
 
+# Target Group for HTTP - can use for testing purposes prior to domain setup
+# resource "aws_lb_target_group" "target_group" {
+#   name        = "ctfd-target-group"
+#   port        = 80
+#   protocol    = "HTTP"
+#   target_type = "ip"
+#   vpc_id      = aws_vpc.private_network.id
+
+#   health_check {
+#     healthy_threshold   = 2
+#     unhealthy_threshold = 5
+#     matcher             = "200,302,304"
+#     timeout             = 15
+#   }
+# }
 
 
 #ECS
@@ -563,8 +624,8 @@ resource "aws_ecs_task_definition" "ecs_task" {
         name  = "AWS_ACCESS_KEY_ID",
         value = "${var.access_key}"
       },
-      { 
-        name = "AWS_SECRET_ACCESS_KEY",
+      {
+        name  = "AWS_SECRET_ACCESS_KEY",
         value = "${var.secret_key}"
       },
       {
@@ -591,8 +652,11 @@ resource "aws_ecs_service" "ecs_service" {
     security_groups = [aws_security_group.ToContainerFromApplicationLoadBalancer.id, aws_security_group.ToContainerFromPrivate.id] # DATABASE CONNECTION ISSUE HERE
   }
 
+
   load_balancer {
-    target_group_arn = aws_lb_target_group.target_group.arn
+    # HTTP target_group_arn - can use for testing purposes prior to domain setup
+    # target_group_arn = aws_lb_target_group.target_group.arn
+    target_group_arn = aws_lb_target_group.https_target_group.arn
     container_name   = "ctfd"
     container_port   = 8000
   }
