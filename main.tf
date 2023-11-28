@@ -44,7 +44,9 @@ resource "aws_ssm_parameter" "db_username" {
   value = "admin"
 }
 
-# Used to generate a random password for the database
+# Used to generate a random password for the database.
+# Could be left but would constantly change db password. Instead "data" source below is used instead with read only access.
+
 # resource "aws_ssm_parameter" "db_password" {
 #   name  = "/ctfd/database/password"
 #   type  = "SecureString"
@@ -359,8 +361,9 @@ resource "aws_security_group" "ToContainerFromPrivate" {
 }
 
 
-#SERVICES
-#Database, Redis, ECS, ECR, ELB, ect...
+#SERVICES - Database, Redis, ECS, ECR, ELB, ect...
+
+#Database
 resource "random_id" "db_name_suffix" {
   byte_length = 2
 }
@@ -396,21 +399,8 @@ resource "aws_elasticache_subnet_group" "subnetgroupcache" {
   subnet_ids = [aws_subnet.private_subnet_a.id, aws_subnet.private_subnet_b.id]
 }
 
-#CHANGE TO MATCH VPC REGION AND AZs!!
+
 #Redis
-# resource "aws_elasticache_cluster" "redis_cache" {
-#   cluster_id           = "ctfd-redis-cache"
-#   engine               = "redis"
-#   node_type            = "cache.t2.micro"
-#   num_cache_nodes      = 1
-#   parameter_group_name = "default.redis4.0"
-#   engine_version       = "4.0.10"
-#   port                 = 6379
-#   security_group_ids   = [aws_security_group.aws_security_group.main_security_group.id]
-
-#   subnet_group_name = aws_elasticache_subnet_group.subnetgroupcache.name
-# }
-
 resource "aws_elasticache_parameter_group" "default" {
   name   = "cache-params"
   family = "redis7"
@@ -620,7 +610,7 @@ resource "aws_ecs_service" "ecs_service" {
   }
 }
 
-# Application Auto Scaling
+# ECS Application Auto Scaling
 resource "aws_appautoscaling_target" "ecs_target" {
   min_capacity       = 1
   max_capacity       = 10
