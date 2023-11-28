@@ -8,25 +8,13 @@ terraform {
 }
 
 #CREDENTIALS (access keys, db username/password, ect...)
-#REPLACE - DO NOT HARDCODE
+
 provider "aws" {
   region     = var.region
   access_key = var.access_key
   secret_key = var.secret_key
 }
 
-locals {
-  env_variables = {
-    "DATABASE_URL" = "mysql+pymysql://${aws_ssm_parameter.db_username.value}:${data.aws_ssm_parameter.db_password.value}@${aws_db_instance.mysql_instance.endpoint}/ctfd"
-    # "REDIS_URL"             = "redis://${aws_elasticache_cluster.redis_cache.cache_nodes[0].address}:6379"
-    "UPLOAD_PROVIDER"       = "s3"
-    "AWS_ACCESS_KEY_ID"     = var.access_key
-    "AWS_SECRET_ACCESS_KEY" = var.secret_key
-    "AWS_S3_BUCKET"         = "${aws_s3_bucket.s3_bucket_ctfd_uploads.id}"
-    "AWS_S3_ENDPOINT_URL"   = "https://${aws_s3_bucket.s3_bucket_ctfd_uploads.bucket_regional_domain_name}"
-    # "REVERSE_PROXY" = "2,1,0,0,0" # for cloudflare proxy and app engine NEG load balancer
-  }
-}
 
 resource "random_password" "password" {
   length  = 16
