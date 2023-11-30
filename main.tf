@@ -506,32 +506,38 @@ resource "aws_lb_listener" "https_listener" {
   load_balancer_arn = aws_lb.alb.arn
   port              = 443
   protocol          = "HTTPS"
-  ssl_policy        = "ELBSecurityPolicy-2016-08"
-  certificate_arn   = aws_acm_certificate.cert.arn # Reference ACM certificate
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = var.certificate_arn #Can use aws_acm_certificate to automate process or generate with LetsEncrypt and import
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.target_group.arn
+    target_group_arn = aws_lb_target_group.https_target_group.arn
   }
 }
 
-# ALB HTTP Listener - can use for testing purposes prior to domain setup
-# resource "aws_lb_listener" "alb_listener" {
-#   load_balancer_arn = aws_lb.alb.arn
-#   port              = "80"
-#   protocol          = "HTTP"
+# ALB HTTP Listener - used for redirects to HTTPS
+resource "aws_lb_listener" "http_listener" {
+  load_balancer_arn = aws_lb.alb.arn
+  port              = "80"
+  protocol          = "HTTP"
 
-#   default_action {
-#     type             = "forward"
-#     target_group_arn = aws_lb_target_group.target_group.arn
-#   }
-# }
+  default_action {
+    type = "redirect"
+
+  # Can remove redirect block for testing
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
+  }
+}
 
 # Target Group for HTTPS
 resource "aws_lb_target_group" "https_target_group" {
   name        = "ctfd-target-group-https"
-  port        = 443 # Ensure your service is listening on HTTPS port
-  protocol    = "HTTPS"
+  port        = 8000 # Container's listening port
+  protocol    = "HTTP" # Traffic from ALB to container is HTTP as SSL is terminated at ALB
   target_type = "ip"
   vpc_id      = aws_vpc.private_network.id
 
@@ -540,12 +546,12 @@ resource "aws_lb_target_group" "https_target_group" {
     unhealthy_threshold = 5
     matcher             = "200,302,304"
     timeout             = 15
-    protocol            = "HTTPS" # Update to HTTPS
+    protocol            = "HTTP" # Health check protocol is HTTP as SSL is terminated at ALB
   }
 }
 
 # Target Group for HTTP - can use for testing purposes prior to domain setup
-# resource "aws_lb_target_group" "target_group" {
+# resource "aws_lb_target_group" "http_target_group" {
 #   name        = "ctfd-target-group"
 #   port        = 80
 #   protocol    = "HTTP"
@@ -632,7 +638,10 @@ resource "aws_ecs_task_definition" "ecs_task" {
         name  = "UPLOAD_PROVIDER",
         value = "s3"
       },
-
+      {
+        name  = "REVERSE_PROXY",
+        value = "1,1,1,1,1"
+      },
     ]
 
 
@@ -655,7 +664,7 @@ resource "aws_ecs_service" "ecs_service" {
 
   load_balancer {
     # HTTP target_group_arn - can use for testing purposes prior to domain setup
-    # target_group_arn = aws_lb_target_group.target_group.arn
+    # target_group_arn = aws_lb_target_group.http_target_group.arn
     target_group_arn = aws_lb_target_group.https_target_group.arn
     container_name   = "ctfd"
     container_port   = 8000

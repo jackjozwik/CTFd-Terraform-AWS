@@ -13,3 +13,8 @@ variable "region" {
   type        = string
   default     = "us-east-1"
 }
+
+variable "certificate_arn" {
+  description = "The ARN of the certificate to use for HTTPS listeners"
+  type        = string
+}
