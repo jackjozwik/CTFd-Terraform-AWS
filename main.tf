@@ -5,6 +5,13 @@ terraform {
       version = "~> 5.0"
     }
   }
+
+  backend "s3" {
+    bucket  = "my-terraform-state-bucket-897544" # Replace with your bucket name
+    key     = "prod/statefile"                   # Path to state file in the bucket
+    region  = "us-east-1"                        # Replace with your bucket region
+    encrypt = true
+  }
 }
 
 #CREDENTIALS (access keys, db username/password, ect...)
@@ -274,7 +281,7 @@ resource "aws_security_group" "ToApplicationLoadBalancerFromAnywhere" {
   description = "Allow inbound traffic on port 80"
   vpc_id      = aws_vpc.private_network.id
 
- # Allow HTTP traffic - to be removed later for testing purposes
+  # Allow HTTP traffic - to be removed later for testing purposes
   ingress {
     from_port   = 80
     to_port     = 80
@@ -473,7 +480,7 @@ resource "aws_s3_bucket_acl" "bucket_acl" {
 # ACM Certificate
 resource "aws_acm_certificate" "cert" {
   domain_name               = "ctf.issessions.ca"
-  subject_alternative_names = ["*.ctf.issessions.ca"]  # Covers all subdomains like web1.ctf.issessions.ca
+  subject_alternative_names = ["*.ctf.issessions.ca"] # Covers all subdomains like web1.ctf.issessions.ca
   validation_method         = "DNS"
 
   lifecycle {
@@ -524,7 +531,7 @@ resource "aws_lb_listener" "http_listener" {
   default_action {
     type = "redirect"
 
-  # Can remove redirect block for testing
+    # Can remove redirect block for testing
     redirect {
       port        = "443"
       protocol    = "HTTPS"
@@ -536,7 +543,7 @@ resource "aws_lb_listener" "http_listener" {
 # Target Group for HTTPS
 resource "aws_lb_target_group" "https_target_group" {
   name        = "ctfd-target-group-https"
-  port        = 8000 # Container's listening port
+  port        = 8000   # Container's listening port
   protocol    = "HTTP" # Traffic from ALB to container is HTTP as SSL is terminated at ALB
   target_type = "ip"
   vpc_id      = aws_vpc.private_network.id
