@@ -9,7 +9,10 @@ variables:
   TF_ROOT: "${CI_PROJECT_DIR}" # Terraform root directory
 
 before_script:
-  - echo "Initializing Terraform..."
+  - echo "Setting up AWS credentials..."
+  - export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+  - export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+  - echo "Setting up Terraform..."
   - apt-get update && apt-get install -y unzip
   - curl -L https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip > terraform.zip
   - unzip terraform.zip
@@ -17,6 +20,7 @@ before_script:
   - rm terraform.zip
   - terraform --version
   - cd ${TF_ROOT}
+  - echo "Initializing Terraform..."
   - terraform init
   - echo "Terraform initialized."
 
