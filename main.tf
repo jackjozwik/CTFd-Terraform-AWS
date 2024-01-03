@@ -113,26 +113,26 @@ resource "aws_internet_gateway" "internet_gateway" {
   }
 }
 
-resource "aws_eip" "nat_eip_a" {
-  domain = "vpc"
+# resource "aws_eip" "nat_eip_a" {
+#   domain = "vpc"
 
-  tags = {
-    Name = "nat-eip"
-  }
-}
+#   tags = {
+#     Name = "nat-eip"
+#   }
+# }
 
-resource "aws_eip" "nat_eip_b" {
-  domain = "vpc"
+# resource "aws_eip" "nat_eip_b" {
+#   domain = "vpc"
 
-  tags = {
-    Name = "nat-eip"
-  }
-}
+#   tags = {
+#     Name = "nat-eip"
+#   }
+# }
 
-resource "aws_nat_gateway" "nat_gateway_a" {
-  subnet_id     = aws_subnet.public_subnet_a.id
-  allocation_id = aws_eip.nat_eip_a.id
-}
+# resource "aws_nat_gateway" "nat_gateway_a" {
+#   subnet_id     = aws_subnet.public_subnet_a.id
+#   allocation_id = aws_eip.nat_eip_a.id
+# }
 
 # Removed for cost
 # resource "aws_nat_gateway" "nat_gateway_b" {
@@ -157,10 +157,10 @@ resource "aws_route_table" "public_route_table" {
 resource "aws_route_table" "private_route_table_a" {
   vpc_id = aws_vpc.private_network.id
 
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.nat_gateway_a.id
-  }
+  # route {
+  #   cidr_block     = "0.0.0.0/0"
+  #   nat_gateway_id = aws_nat_gateway.nat_gateway_a.id
+  # }
 
   tags = {
     Name = "private-route-table"
@@ -170,10 +170,10 @@ resource "aws_route_table" "private_route_table_a" {
 resource "aws_route_table" "private_route_table_b" {
   vpc_id = aws_vpc.private_network.id
 
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.nat_gateway_a.id
-  }
+  # route {
+  #   cidr_block     = "0.0.0.0/0"
+  #   nat_gateway_id = aws_nat_gateway.nat_gateway_a.id
+  # }
 
   tags = {
     Name = "private-route-table"
