@@ -12,7 +12,7 @@ before_script:
   - echo "Setting up AWS credentials..."
   - export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
   - export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-  - echo "AWS Access Key ID $AWS_ACCESS_KEY_ID"
+  - echo "certificate_arn $certificate_arn"
   - echo "Setting up Terraform..."
   - apt-get update && apt-get install -y unzip
   - curl -L https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip > terraform.zip
@@ -40,7 +40,7 @@ plan:
     paths:
       - tfplan
   only:
-    - main # Change to your main branch name
+    - main
 
 apply:
   stage: apply
@@ -50,4 +50,4 @@ apply:
     - echo "Terraform successfully applied!"
   when: manual
   only:
-    - main # Change to your main branch name
+    - main
